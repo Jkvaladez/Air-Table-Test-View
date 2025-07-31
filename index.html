@@ -70,17 +70,12 @@
             baseId: 'appOKqcWBsHytL5Ae', 
         };
         const BASE_URL = `https://api.airtable.com/v0/${airtableConfig.baseId}/`;
+        
+        // Cache to store all records, indexed by their ID, for cross-referencing linked records.
+        let dataCache = {};
 
         // Utility function to fetch data from a table
-        async function fetchAirtableData(tableName, containerId) {
-            const container = document.getElementById(containerId);
-            container.innerHTML = `
-                <div class="col-span-full flex flex-col items-center justify-center py-10">
-                    <div class="loading-spinner mb-4"></div>
-                    <p class="text-gray-500">Loading ${tableName}...</p>
-                </div>
-            `; // Show specific spinner
-
+        async function fetchAirtableData(tableName) {
             try {
                 const response = await fetch(`${BASE_URL}${encodeURIComponent(tableName)}`, {
                     headers: {
@@ -93,16 +88,32 @@
                 }
 
                 const data = await response.json();
-                renderCards(data.records, container);
+                
+                // Store records in the global cache, indexed by their ID
+                data.records.forEach(record => {
+                    dataCache[record.id] = record.fields;
+                });
+
+                return data.records;
 
             } catch (error) {
                 console.error(`Could not fetch data from ${tableName}:`, error);
+                const container = document.getElementById(getContainerId(tableName));
                 container.innerHTML = `<p class="text-red-500 col-span-full text-center">Failed to load data for **${tableName}**. Please check the API key, table name, and network connection.</p>`;
+                return []; // Return an empty array on error
             }
         }
 
+        // Helper to get container ID from table name
+        function getContainerId(tableName) {
+            if (tableName === 'Machines') return 'machines-container';
+            if (tableName === 'BSV 100 Consumables') return 'consumables-container';
+            return '';
+        }
+
         // Utility function to render data cards
-        function renderCards(records, container) {
+        function renderCards(records, containerId, titleFieldName, fieldsToSkip = []) {
+            const container = document.getElementById(containerId);
             container.innerHTML = ''; // Clear the container
             if (records.length === 0) {
                 container.innerHTML = `<p class="text-gray-500 col-span-full text-center">No records found.</p>`;
@@ -111,20 +122,43 @@
 
             records.forEach(record => {
                 const fields = record.fields;
-                // Check if any fields are present
-                const hasData = Object.keys(fields).some(key => fields[key] !== null && fields[key] !== undefined && fields[key] !== '');
-                
                 const card = document.createElement('div');
                 card.className = 'bg-gray-50 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300';
                 
-                if (hasData) {
-                    card.innerHTML = `
-                        ${fields.Name ? `<h3 class="text-xl font-medium text-gray-900 mb-2">${fields.Name}</h3>` : ''}
-                        ${fields['Part Number'] ? `<p class="text-gray-600">Part Number: ${fields['Part Number']}</p>` : ''}
-                        ${fields['Serial Number'] ? `<p class="text-gray-600">Serial Number: ${fields['Serial Number']}</p>` : ''}
-                        ${fields.Status ? `<p class="text-gray-600">Status: ${fields.Status}</p>` : ''}
-                        ${fields.Location ? `<p class="text-gray-600">Location: ${fields.Location}</p>` : ''}
-                    `;
+                let cardHtml = '';
+                const cardTitle = fields[titleFieldName];
+
+                if (cardTitle) {
+                    cardHtml += `<h3 class="text-xl font-medium text-gray-900 mb-2">${cardTitle}</h3>`;
+                }
+
+                // Iterate through all fields, skipping the title field and specified fields
+                for (const fieldName in fields) {
+                    if (fieldName !== titleFieldName && !fieldsToSkip.includes(fieldName)) { 
+                        const fieldValue = fields[fieldName];
+                        if (fieldValue) {
+                            let displayValue = fieldValue;
+                            
+                            // Check if the field is a linked record (an array of IDs)
+                            if (Array.isArray(fieldValue) && fieldValue.every(v => typeof v === 'string' && v.startsWith('rec'))) {
+                                // Resolve the linked record IDs to their names using the dataCache
+                                const linkedNames = fieldValue.map(id => {
+                                    const linkedRecord = dataCache[id];
+                                    // Fallback to a suitable field or the ID if no name is found
+                                    return linkedRecord ? (linkedRecord['Name'] || linkedRecord['Part Number'] || id) : id;
+                                }).join(', ');
+                                displayValue = linkedNames;
+                            } else if (Array.isArray(fieldValue)) {
+                                // Handle other arrays that are not linked records
+                                displayValue = fieldValue.join(', ');
+                            }
+                            cardHtml += `<p class="text-gray-600"><span class="font-semibold">${fieldName}:</span> ${displayValue}</p>`;
+                        }
+                    }
+                }
+                
+                if (cardHtml) {
+                    card.innerHTML = cardHtml;
                 } else {
                     card.innerHTML = `<p class="text-gray-500">No data available for this record.</p>`;
                 }
@@ -132,11 +166,49 @@
             });
         }
 
-        // Call the functions to fetch and display data for both tables on page load
-        window.onload = () => {
-            fetchAirtableData('Machines', 'machines-container');
-            fetchAirtableData('BSV 100 Consumables', 'consumables-container');
-        };
+        // Main function to initialize the application
+        async function initApp() {
+            // Display loading spinners while data is being fetched
+            document.getElementById('machines-container').innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-10">
+                    <div class="loading-spinner mb-4"></div>
+                    <p class="text-gray-500">Loading Machines...</p>
+                </div>
+            `;
+            document.getElementById('consumables-container').innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-10">
+                    <div class="loading-spinner mb-4"></div>
+                    <p class="text-gray-500">Loading BSV 100 Consumables...</p>
+                </div>
+            `;
+
+            // Use Promise.all to fetch both tables concurrently
+            const [machines, consumables] = await Promise.all([
+                fetchAirtableData('Machines'),
+                fetchAirtableData('BSV 100 Consumables')
+            ]);
+            
+            // Sort machines by Machine ID
+            machines.sort((a, b) => {
+                const numA = parseInt(a.fields['Machine ID'].split('-')[1]);
+                const numB = parseInt(b.fields['Machine ID'].split('-')[1]);
+                return numA - numB;
+            });
+            
+            // Sort consumables by Part Number
+            consumables.sort((a, b) => {
+                const nameA = a.fields['Part Number'] || '';
+                const nameB = b.fields['Part Number'] || '';
+                return nameA.localeCompare(nameB);
+            });
+            
+            // Render the cards with specific titles and skipped fields
+            renderCards(machines, 'machines-container', 'Machine ID');
+            // Change the title field for consumables back to "Name"
+            renderCards(consumables, 'consumables-container', 'Name', ['Machines']);
+        }
+
+        window.onload = initApp;
 
     </script>
 </body>
