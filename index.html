@@ -3,201 +3,142 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Airtable Viewer with Consumables</title>
-    <!-- Load React and ReactDOM from a CDN -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Load Babel to convert modern JavaScript (JSX) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Load Tailwind CSS for styling -->
+    <title>Airtable Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Add Inter font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
         }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #000;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
-<body class="bg-gray-100 p-8 antialiased text-gray-800">
-    <div id="root" class="max-w-4xl mx-auto"></div>
+<body class="bg-gray-100 text-gray-800 p-8">
 
-    <script type="text/babel">
-        // Hardcoded Airtable credentials and table names.
-        // Replace the placeholder strings with your actual values.
-        const AIRTABLE_API_KEY = "patA8WihRZtwXarV8.d6d00c7b162757fb1b30efe56d8b58f8dbbbbb9f058e52a22fcde00e566b9956";
-        const AIRTABLE_BASE_ID = "appOKqcWBsHytL5Ae";
-        const MACHINES_TABLE_NAME = "Machines";
-        const CONSUMABLES_TABLE_NAME = "BSV 100 Consumables";
+    <!-- Header Section -->
+    <header class="text-center mb-12">
+        <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-2">Airtable Viewer</h1>
+        <p class="text-lg text-gray-600">Viewing Data from Airtable</p>
+    </header>
 
-        // The main App component for our Airtable data viewer.
-        const App = () => {
-            const [machines, setMachines] = React.useState([]);
-            const [consumables, setConsumables] = React.useState([]);
-            const [loading, setLoading] = React.useState(false);
-            const [error, setError] = React.useState(null);
+    <!-- Main Content Area -->
+    <main class="max-w-7xl mx-auto space-y-12">
 
-            const fetchData = async () => {
-                setLoading(true);
-                setError(null);
-
-                try {
-                    // Fetch both machines and consumables data in parallel
-                    const [machinesResponse, consumablesResponse] = await Promise.all([
-                        fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${MACHINES_TABLE_NAME}`, {
-                            headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` },
-                        }),
-                        fetch(`https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${CONSUMABLES_TABLE_NAME}`, {
-                            headers: { Authorization: `Bearer ${AIRTABLE_API_KEY}` },
-                        }),
-                    ]);
-
-                    if (!machinesResponse.ok) {
-                        const errorData = await machinesResponse.json();
-                        throw new Error(`Airtable API Error fetching machines: ${errorData.error.message}`);
-                    }
-                    if (!consumablesResponse.ok) {
-                        const errorData = await consumablesResponse.json();
-                        throw new Error(`Airtable API Error fetching consumables: ${errorData.error.message}`);
-                    }
-
-                    const machinesResult = await machinesResponse.json();
-                    const consumablesResult = await consumablesResponse.json();
-
-                    // Create a map for easy lookup of consumable names by their ID
-                    const consumableMap = consumablesResult.records.reduce((acc, curr) => {
-                        acc[curr.id] = curr.fields.Name || curr.id;
-                        return acc;
-                    }, {});
-
-                    // Replace consumable IDs with names in the machines data
-                    let processedMachines = machinesResult.records.map(record => {
-                        const newFields = { ...record.fields };
-                        for (const key in newFields) {
-                            if (Array.isArray(newFields[key])) {
-                                // Check if the field name is related to consumables
-                                if (key.toLowerCase().includes('consumable') || key.toLowerCase().includes('materials')) {
-                                    newFields[key] = newFields[key].map(id => consumableMap[id] || id);
-                                }
-                            }
-                        }
-                        return { ...record, fields: newFields };
-                    });
-
-                    // Sort the records by "Machine ID"
-                    processedMachines.sort((a, b) => {
-                        const machineIdA = a.fields["Machine ID"] || "";
-                        const machineIdB = b.fields["Machine ID"] || "";
-                        return machineIdA.localeCompare(machineIdB);
-                    });
-                    
-                    setMachines(processedMachines);
-                    setConsumables(consumablesResult.records);
-
-                } catch (err) {
-                    setError(err.message);
-                } finally {
-                    setLoading(false);
-                }
-            };
-
-            React.useEffect(() => {
-                fetchData();
-            }, []); // Fetch data once on initial load
-
-            return (
-                <div className="min-h-screen bg-gray-100 p-8 font-sans antialiased text-gray-800">
-                    <div className="max-w-4xl mx-auto">
-                        <header className="text-center mb-10">
-                            <h1 className="text-4xl md:text-5xl font-bold text-blue-600 mb-2">Airtable Data Viewer</h1>
-                            <p className="text-gray-600 text-lg">A simple display of your machines and consumables data.</p>
-                        </header>
-
-                        {loading && (
-                            <div className="text-center p-8 text-gray-500">
-                                <p>Loading data...</p>
-                            </div>
-                        )}
-
-                        {error && (
-                            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded-md shadow-sm" role="alert">
-                                <p className="font-bold">Error</p>
-                                <p>{error}</p>
-                            </div>
-                        )}
-
-                        {/* Machines Section */}
-                        <div className="mb-10">
-                            <h2 className="text-2xl font-semibold mb-4 text-gray-700">Machines</h2>
-                            {machines.length > 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {machines.map(record => (
-                                        <div key={record.id} className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
-                                            <h3 className="text-xl font-bold mb-2 text-blue-700">
-                                                {record.fields["Machine ID"] || record.fields.Name || record.id}
-                                            </h3>
-                                            <div className="text-sm space-y-2">
-                                                {Object.entries(record.fields).map(([key, value]) => (
-                                                    <div key={key} className="flex flex-col">
-                                                        <span className="font-semibold text-gray-600">{key}:</span>
-                                                        <span className="text-gray-800">
-                                                            {Array.isArray(value) ? value.join(', ') : String(value)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {!loading && machines.length === 0 && !error && (
-                                <div className="text-center text-gray-500 p-8 rounded-lg border-2 border-dashed border-gray-300">
-                                    <p>No machines found.</p>
-                                </div>
-                            )}
-                        </div>
-                        
-                        ---
-                        
-                        {/* Consumables Section */}
-                        <div className="mt-10">
-                            <h2 className="text-2xl font-semibold mb-4 text-gray-700">BSV 100 Consumables</h2>
-                            {consumables.length > 0 && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {consumables.map(record => (
-                                        <div key={record.id} className="bg-white p-6 rounded-2xl shadow-lg border border-gray-200">
-                                            <h3 className="text-xl font-bold mb-2 text-blue-700">
-                                                {record.fields["Name"] || record.id}
-                                            </h3>
-                                            <div className="text-sm space-y-2">
-                                                {Object.entries(record.fields).map(([key, value]) => (
-                                                    <div key={key} className="flex flex-col">
-                                                        <span className="font-semibold text-gray-600">{key}:</span>
-                                                        <span className="text-gray-800">
-                                                            {Array.isArray(value) ? value.join(', ') : String(value)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                            {!loading && consumables.length === 0 && !error && (
-                                <div className="text-center text-gray-500 p-8 rounded-lg border-2 border-dashed border-gray-300">
-                                    <p>No consumables found.</p>
-                                </div>
-                            )}
-                        </div>
-                    </div>
+        <!-- Machines Section -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+            <h2 class="text-3xl font-bold text-gray-900 mb-6">Machines</h2>
+            <div id="machines-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Loading spinner for machines -->
+                <div class="col-span-full flex flex-col items-center justify-center py-10">
+                    <div class="loading-spinner mb-4"></div>
+                    <p class="text-gray-500">Loading Machines...</p>
                 </div>
-            );
+            </div>
+        </section>
+
+        <!-- BSV 100 Consumables Section -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+            <h2 class="text-3xl font-bold text-gray-900 mb-6">BSV 100 Consumables</h2>
+            <div id="consumables-container" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Loading spinner for consumables -->
+                <div class="col-span-full flex flex-col items-center justify-center py-10">
+                    <div class="loading-spinner mb-4"></div>
+                    <p class="text-gray-500">Loading BSV 100 Consumables...</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Airtable configuration - replace these with your actual details
+        const airtableConfig = {
+            apiKey: 'pat_YOUR_API_KEY', // Replace with your Personal Access Token
+            baseId: 'appo0L6iXb1d1V6vD', // Your Base ID
+        };
+        const BASE_URL = `https://api.airtable.com/v0/${airtableConfig.baseId}/`;
+
+        // Utility function to fetch data from a table
+        async function fetchAirtableData(tableName, containerId) {
+            const container = document.getElementById(containerId);
+            container.innerHTML = `
+                <div class="col-span-full flex flex-col items-center justify-center py-10">
+                    <div class="loading-spinner mb-4"></div>
+                    <p class="text-gray-500">Loading ${tableName}...</p>
+                </div>
+            `; // Show specific spinner
+
+            try {
+                const response = await fetch(`${BASE_URL}${encodeURIComponent(tableName)}`, {
+                    headers: {
+                        'Authorization': `Bearer ${airtableConfig.apiKey}`
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                renderCards(data.records, container);
+
+            } catch (error) {
+                console.error(`Could not fetch data from ${tableName}:`, error);
+                container.innerHTML = `<p class="text-red-500 col-span-full text-center">Failed to load data for **${tableName}**. Please check the API key, table name, and network connection.</p>`;
+            }
+        }
+
+        // Utility function to render data cards
+        function renderCards(records, container) {
+            container.innerHTML = ''; // Clear the container
+            if (records.length === 0) {
+                container.innerHTML = `<p class="text-gray-500 col-span-full text-center">No records found.</p>`;
+                return;
+            }
+
+            records.forEach(record => {
+                const fields = record.fields;
+                // Check if any fields are present
+                const hasData = Object.keys(fields).some(key => fields[key] !== null && fields[key] !== undefined && fields[key] !== '');
+                
+                const card = document.createElement('div');
+                card.className = 'bg-gray-50 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-300';
+                
+                if (hasData) {
+                    card.innerHTML = `
+                        ${fields.Name ? `<h3 class="text-xl font-medium text-gray-900 mb-2">${fields.Name}</h3>` : ''}
+                        ${fields['Part Number'] ? `<p class="text-gray-600">Part Number: ${fields['Part Number']}</p>` : ''}
+                        ${fields['Serial Number'] ? `<p class="text-gray-600">Serial Number: ${fields['Serial Number']}</p>` : ''}
+                        ${fields.Status ? `<p class="text-gray-600">Status: ${fields.Status}</p>` : ''}
+                        ${fields.Location ? `<p class="text-gray-600">Location: ${fields.Location}</p>` : ''}
+                    `;
+                } else {
+                    card.innerHTML = `<p class="text-gray-500">No data available for this record.</p>`;
+                }
+                container.appendChild(card);
+            });
+        }
+
+        // Call the functions to fetch and display data for both tables on page load
+        window.onload = () => {
+            // Replace 'Machines' and 'BSV 100 Consumables' with your table names
+            fetchAirtableData('Machines', 'machines-container');
+            fetchAirtableData('BSV 100 Consumables', 'consumables-container');
         };
 
-        const container = document.getElementById('root');
-        const root = ReactDOM.createRoot(container);
-        root.render(<App />);
     </script>
 </body>
 </html>
