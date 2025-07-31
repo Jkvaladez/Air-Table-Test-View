@@ -66,8 +66,9 @@
     <script>
         // Airtable configuration - replace these with your actual details
         const airtableConfig = {
-            apiKey: 'pat_YOUR_API_KEY', // Replace with your Personal Access Token
-            baseId: 'appo0L6iXb1d1V6vD', // Your Base ID
+            // CRITICAL: Replace this placeholder with your own private Personal Access Token
+            apiKey: 'patA8WihRZtwXarV8.d6d00c7b162757fb1b30efe56d8b58f8dbbbbb9f058e52a22fcde00e566b9956', 
+            baseId: 'appo0L6iXb1d1V6vD', // Your Base ID is already included
         };
         const BASE_URL = `https://api.airtable.com/v0/${airtableConfig.baseId}/`;
 
@@ -134,7 +135,6 @@
 
         // Call the functions to fetch and display data for both tables on page load
         window.onload = () => {
-            // Replace 'Machines' and 'BSV 100 Consumables' with your table names
             fetchAirtableData('Machines', 'machines-container');
             fetchAirtableData('BSV 100 Consumables', 'consumables-container');
         };
